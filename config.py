@@ -1,7 +1,7 @@
 """ A neural chatbot using sequence to sequence model with
-attentional decoder. 
+attentional decoder.
 
-This is based on Google Translate Tensorflow model 
+This is based on Google Translate Tensorflow model
 https://github.com/tensorflow/models/blob/master/tutorials/rnn/translate/
 
 Sequence to sequence model by Cho et al.(2014)
@@ -16,7 +16,7 @@ See readme.md for instruction on how to run the starter code.
 """
 
 # parameters for processing the dataset
-DATA_PATH = '/Users/Chip/data/cornell movie-dialogs corpus'
+DATA_PATH = './data/cornell_movie_dialogs_corpus'
 CONVO_FILE = 'movie_conversations.txt'
 LINE_FILE = 'movie_lines.txt'
 OUTPUT_FILE = 'output_convo.txt'
@@ -34,10 +34,10 @@ TESTSET_SIZE = 25000
 
 # model parameters
 """ Train encoder length distribution:
-[175, 92, 11883, 8387, 10656, 13613, 13480, 12850, 11802, 10165, 
-8973, 7731, 7005, 6073, 5521, 5020, 4530, 4421, 3746, 3474, 3192, 
-2724, 2587, 2413, 2252, 2015, 1816, 1728, 1555, 1392, 1327, 1248, 
-1128, 1084, 1010, 884, 843, 755, 705, 660, 649, 594, 558, 517, 475, 
+[175, 92, 11883, 8387, 10656, 13613, 13480, 12850, 11802, 10165,
+8973, 7731, 7005, 6073, 5521, 5020, 4530, 4421, 3746, 3474, 3192,
+2724, 2587, 2413, 2252, 2015, 1816, 1728, 1555, 1392, 1327, 1248,
+1128, 1084, 1010, 884, 843, 755, 705, 660, 649, 594, 558, 517, 475,
 426, 444, 388, 349, 337]
 These buckets size seem to work the best
 """
@@ -57,3 +57,5 @@ LR = 0.5
 MAX_GRAD_NORM = 5.0
 
 NUM_SAMPLES = 512
+ENC_VOCAB = 24467
+DEC_VOCAB = 24635
