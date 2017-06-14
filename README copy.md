@@ -1,8 +1,7 @@
-<<<<<<<
 A neural chatbot using sequence to sequence model with
 attentional decoder. This is a fully functional chatbot.
 
-This is based on Google Translate Tensorflow model 
+This is based on Google Translate Tensorflow model
 https://github.com/tensorflow/models/blob/master/tutorials/rnn/translate/
 
 Sequence to sequence model by Cho et al.(2014)
@@ -11,7 +10,7 @@ Created by Chip Huyen as the starter code for assignment 3,
 class CS 20SI: "TensorFlow for Deep Learning Research"
 cs20si.stanford.edu
 
-The detailed assignment handout and information on training time can be found at http://web.stanford.edu/class/cs20si/assignments/a3.pdf 
+The detailed assignment handout and information on training time can be found at http://web.stanford.edu/class/cs20si/assignments/a3.pdf
 
 <h2>Sample conversation</h2>
 HUMAN ++++ hi <br>
@@ -88,7 +87,7 @@ See output_convo.txt for more sample conversations.
 <h2>Usage</h2>
 
 Step 1: create a data folder in your project directory, download
-the Cornell Movie-Dialogs Corpus from 
+the Cornell Movie-Dialogs Corpus from
 https://www.cs.cornell.edu/~cristian/Cornell_Movie-Dialogs_Corpus.html
 Unzip it
 
@@ -115,4 +114,3 @@ If you find the tutorial helpful, please head over to <a href="http://web.stanfo
 to see how you can help us create the first realistic dialogue dataset.
 
 Thank you very much!
->>>>>>> origin/master

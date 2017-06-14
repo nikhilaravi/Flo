@@ -1,7 +1,7 @@
 """ A neural chatbot using sequence to sequence model with
-attentional decoder. 
+attentional decoder.
 
-This is based on Google Translate Tensorflow model 
+This is based on Google Translate Tensorflow model
 https://github.com/tensorflow/models/blob/master/tutorials/rnn/translate/
 
 Sequence to sequence model by Cho et al.(2014)
@@ -74,7 +74,12 @@ def run_step(sess, model, encoder_inputs, decoder_inputs, decoder_masks, bucket_
                        model.gradient_norms[bucket_id],  # gradient norm.
                        model.losses[bucket_id]]  # loss for this batch.
     else:
-        output_feed = [model.losses[bucket_id]]  # loss for this batch.
+        if config.BEAM_SEARCH:
+              output_feed = [model.beam_path[bucket_id]]  # Loss for this batch.
+              output_feed.append(model.beam_symbol[bucket_id])
+        else:
+            output_feed = [model.losses[bucket_id]]  # loss for this batch.
+
         for step in xrange(decoder_size):  # output logits.
             output_feed.append(model.outputs[bucket_id][step])
 
@@ -82,11 +87,15 @@ def run_step(sess, model, encoder_inputs, decoder_inputs, decoder_masks, bucket_
     if not forward_only:
         return outputs[1], outputs[2], None  # Gradient norm, loss, no outputs.
     else:
-        return None, outputs[0], outputs[1:]  # No gradient norm, loss, outputs.
+        if config.BEAM_SEARCH:
+            # path, symbol, output_logits
+            return outputs[0], outputs[1], outputs[2:]  # No gradient norm, loss, outputs.
+        else:
+            return None, outputs[0], outputs[1:]  # No gradient norm, loss, outputs.
 
 def _get_buckets():
     """ Load the dataset into buckets based on their lengths.
-    train_buckets_scale is the inverval that'll help us 
+    train_buckets_scale is the inverval that'll help us
     choose a random bucket later on.
     """
     test_buckets = data.load_data('test_ids.enc', 'test_ids.dec')
@@ -122,10 +131,10 @@ def _eval_test_set(sess, model, test_buckets):
             print("  Test: empty bucket %d" % (bucket_id))
             continue
         start = time.time()
-        encoder_inputs, decoder_inputs, decoder_masks = data.get_batch(test_buckets[bucket_id], 
+        encoder_inputs, decoder_inputs, decoder_masks = data.get_batch(test_buckets[bucket_id],
                                                                         bucket_id,
                                                                         batch_size=config.BATCH_SIZE)
-        _, step_loss, _ = run_step(sess, model, encoder_inputs, decoder_inputs, 
+        _, step_loss, _ = run_step(sess, model, encoder_inputs, decoder_inputs,
                                    decoder_masks, bucket_id, True)
         print('Test bucket {}: loss {}, time {}'.format(bucket_id, step_loss, time.time() - start))
 
@@ -148,7 +157,7 @@ def train():
         while True:
             skip_step = _get_skip_step(iteration)
             bucket_id = _get_random_bucket(train_buckets_scale)
-            encoder_inputs, decoder_inputs, decoder_masks = data.get_batch(data_buckets[bucket_id], 
+            encoder_inputs, decoder_inputs, decoder_masks = data.get_batch(data_buckets[bucket_id],
                                                                            bucket_id,
                                                                            batch_size=config.BATCH_SIZE)
             start = time.time()
@@ -182,16 +191,32 @@ def _construct_response(output_logits, inv_dec_vocab):
     """ Construct a response to the user's encoder input.
     @output_logits: the outputs from sequence to sequence wrapper.
     output_logits is decoder_size np array, each of dim 1 x DEC_VOCAB
-    
+
     This is a greedy decoder - outputs are just argmaxes of output_logits.
     """
-    print(output_logits[0])
+    # print('output logits: ', output_logits[0])
     outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+    # beam search here
+
+
     # If there is an EOS symbol in outputs, cut them at that point.
     if config.EOS_ID in outputs:
         outputs = outputs[:outputs.index(config.EOS_ID)]
     # Print out sentence corresponding to outputs.
     return " ".join([tf.compat.as_str(inv_dec_vocab[output]) for output in outputs])
+
+def _construct_beam_response(output_logits, inv_dec_vocab):
+    """ Construct a response to the user's encoder input.
+    @paths,
+    Beam Search decoder
+    """
+    foutputs = [int(logit)  for logit in output_logits[::-1]]
+
+    # If there is an EOS symbol in outputs, cut them at that point.
+    if config.EOS_ID in foutputs:
+    #         # print outputs
+           foutputs = foutputs[:foutputs.index(config.EOS_ID)]
+    return " ".join([tf.compat.as_str(inv_dec_vocab[output]) for output in foutputs])
 
 def chat():
     """ in test mode, we don't to create the backward path
@@ -211,31 +236,74 @@ def chat():
         # Decode from standard input.
         max_length = config.BUCKETS[-1][0]
         print('Welcome to TensorBro. Say something. Enter to exit. Max length is', max_length)
-        while True:
-            line = _get_user_input()
-            if len(line) > 0 and line[-1] == '\n':
-                line = line[:-1]
-            if line == '':
-                break
-            output_file.write('HUMAN ++++ ' + line + '\n')
-            # Get token-ids for the input sentence.
-            token_ids = data.sentence2id(enc_vocab, str(line))
-            if (len(token_ids) > max_length):
-                print('Max length I can handle is:', max_length)
+
+        if config.BEAM_SEARCH:
+            while True:
                 line = _get_user_input()
-                continue
-            # Which bucket does it belong to?
-            bucket_id = _find_right_bucket(len(token_ids))
-            # Get a 1-element batch to feed the sentence to the model.
-            encoder_inputs, decoder_inputs, decoder_masks = data.get_batch([(token_ids, [])], 
-                                                                            bucket_id,
-                                                                            batch_size=1)
-            # Get output logits for the sentence.
-            _, _, output_logits = run_step(sess, model, encoder_inputs, decoder_inputs,
-                                           decoder_masks, bucket_id, True)
-            response = _construct_response(output_logits, inv_dec_vocab)
-            print(response)
-            output_file.write('BOT ++++ ' + response + '\n')
+                if len(line) > 0 and line[-1] == '\n':
+                    line = line[:-1]
+                if line == '':
+                    break
+                output_file.write('HUMAN ++++ ' + line + '\n')
+                # Get token-ids for the input sentence.
+                token_ids = data.sentence2id(enc_vocab, str(line))
+                if (len(token_ids) > max_length):
+                    print('Max length I can handle is:', max_length)
+                    line = _get_user_input()
+                    continue
+                # Which bucket does it belong to?
+                bucket_id = _find_right_bucket(len(token_ids))
+                # Get a 1-element batch to feed the sentence to the model.
+                encoder_inputs, decoder_inputs, decoder_masks = data.get_batch([(token_ids, [])],
+                                                                                bucket_id,
+                                                                                batch_size=1)
+                # add beam search parameter to run_Step
+                path, symbol, output_logits = run_step(sess, model, encoder_inputs, decoder_inputs,
+                                               decoder_masks, bucket_id, True)
+
+                k = output_logits[0]
+                paths = []
+                for kk in range(config.BEAM_SIZE):
+                  paths.append([])
+                curr = range(config.BEAM_SIZE)
+                num_steps = len(path)
+                for i in range(num_steps-1, -1, -1):
+                  for kk in range(config.BEAM_SIZE):
+                    paths[kk].append(symbol[i][curr[kk]])
+                    curr[kk] = path[i][curr[kk]]
+                responses = set()
+                for kk in range(config.BEAM_SIZE):
+                    response = _construct_beam_response(paths[kk], inv_dec_vocab)
+                    if response not in responses:
+                      responses.add(response)
+                      print('response: ', response)
+                      output_file.write('BOT ++++ ' + response + '\n')
+        else:
+            while True:
+                line = _get_user_input()
+                if len(line) > 0 and line[-1] == '\n':
+                    line = line[:-1]
+                if line == '':
+                    break
+                output_file.write('HUMAN ++++ ' + line + '\n')
+                # Get token-ids for the input sentence.
+                token_ids = data.sentence2id(enc_vocab, str(line))
+                if (len(token_ids) > max_length):
+                    print('Max length I can handle is:', max_length)
+                    line = _get_user_input()
+                    continue
+                # Which bucket does it belong to?
+                bucket_id = _find_right_bucket(len(token_ids))
+                # Get a 1-element batch to feed the sentence to the model.
+                encoder_inputs, decoder_inputs, decoder_masks = data.get_batch([(token_ids, [])],
+                                                                                bucket_id,
+                                                                                batch_size=1)
+                # Get output logits for the sentence.
+                _, _, output_logits = run_step(sess, model, encoder_inputs, decoder_inputs,
+                                               decoder_masks, bucket_id, True)
+                response = _construct_response(output_logits, inv_dec_vocab)
+                print('response: ', response)
+                output_file.write('BOT ++++ ' + response + '\n')
         output_file.write('=============================================\n')
         output_file.close()
 

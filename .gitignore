@@ -1,6 +1,9 @@
 .DS_Store
 data/*
 processed/
+checkpoints/
+checkpoints_beamsearch/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
