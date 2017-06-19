@@ -68,22 +68,23 @@ class ChatBotModel(object):
         print('Creating loss... \nIt might take a couple of minutes depending on how many buckets you have.')
         start = time.time()
         def _seq2seq_f(encoder_inputs, decoder_inputs, do_decode, beam_search=False):
-            # return tf.nn.seq2seq.embedding_attention_seq2seq(
-            #         encoder_inputs, decoder_inputs, self.cell,
-            #         num_encoder_symbols=config.ENC_VOCAB,
-            #         num_decoder_symbols=config.DEC_VOCAB,
-            #         embedding_size=config.HIDDEN_SIZE,
-            #         output_projection=self.output_projection,
-            #         feed_previous=do_decode)
-
-            return embedding_attention_seq2seq(encoder_inputs, decoder_inputs, self.cell,
-                    num_encoder_symbols=config.ENC_VOCAB,
-                    num_decoder_symbols=config.DEC_VOCAB,
-                    embedding_size=config.HIDDEN_SIZE,
-                    output_projection=self.output_projection,
-                    feed_previous=do_decode,
-                    beam_search=beam_search,
-                    beam_size = config.BEAM_SIZE)
+            if not beam_search:
+                return tf.nn.seq2seq.embedding_attention_seq2seq(
+                        encoder_inputs, decoder_inputs, self.cell,
+                        num_encoder_symbols=config.ENC_VOCAB,
+                        num_decoder_symbols=config.DEC_VOCAB,
+                        embedding_size=config.HIDDEN_SIZE,
+                        output_projection=self.output_projection,
+                        feed_previous=do_decode)
+            else:
+                return embedding_attention_seq2seq(encoder_inputs, decoder_inputs, self.cell,
+                        num_encoder_symbols=config.ENC_VOCAB,
+                        num_decoder_symbols=config.DEC_VOCAB,
+                        embedding_size=config.HIDDEN_SIZE,
+                        output_projection=self.output_projection,
+                        feed_previous=do_decode,
+                        beam_search=beam_search,
+                        beam_size = config.BEAM_SIZE)
 
         if self.fw_only:
             if config.BEAM_SEARCH:

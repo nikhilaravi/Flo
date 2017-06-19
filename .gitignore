@@ -3,6 +3,8 @@ data/*
 processed/
 checkpoints/
 checkpoints_beamsearch/
+checkpoints_char/
+processed_char/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

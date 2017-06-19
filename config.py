@@ -20,9 +20,9 @@ DATA_PATH = './data/cornell_movie_dialogs_corpus'
 CONVO_FILE = 'movie_conversations.txt'
 LINE_FILE = 'movie_lines.txt'
 OUTPUT_FILE = 'output_convo.txt'
-PROCESSED_PATH = 'processed'
+PROCESSED_PATH = 'processed/'
 CPT_PATH = 'checkpoints/'
-
+DEBUG = True
 THRESHOLD = 2
 
 PAD_ID = 0
@@ -49,6 +49,11 @@ These buckets size seem to work the best
 
 BUCKETS = [(8, 10), (12, 14), (16, 19)]
 
+# CHARACTER LEVEL MODEL BUCKETS
+
+# [65945, 66266, 64404]
+# BUCKETS = [(24, 24), (55,55), (150,150)]
+
 NUM_LAYERS = 3
 HIDDEN_SIZE = 256
 BATCH_SIZE = 64
@@ -60,5 +65,14 @@ NUM_SAMPLES = 512
 ENC_VOCAB = 24467
 DEC_VOCAB = 24635
 
-BEAM_SEARCH = True
+# BEAM Search
+
+BEAM_SEARCH = False
 BEAM_SIZE = 5
+
+# ANTI LM model
+ANTI_LM = True
+GAMMA = 0.4
+LAMBDA = 0.3 # punishment weight for ANTILM model
+# ENC_VOCAB = 24498
+# DEC_VOCAB = 24680

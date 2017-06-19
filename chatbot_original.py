@@ -30,13 +30,6 @@ from model import ChatBotModel
 import config
 import data
 
-import heapq
-def dict_lookup(rev_vocab, out):
-    word = rev_vocab[out] if (out < len(rev_vocab)) else data_utils._UNK
-    if isinstance(word, bytes):
-      word = word.decode()
-    return word
-
 def _get_random_bucket(train_buckets_scale):
     """ Get a random bucket from which to choose a training sample """
     rand = random.random()
@@ -260,110 +253,31 @@ def chat():
                     continue
                 # Which bucket does it belong to?
                 bucket_id = _find_right_bucket(len(token_ids))
+                # Get a 1-element batch to feed the sentence to the model.
+                encoder_inputs, decoder_inputs, decoder_masks = data.get_batch([(token_ids, [])],
+                                                                                bucket_id,
+                                                                                batch_size=1)
+                # add beam search parameter to run_Step
+                path, symbol, output_logits = run_step(sess, model, encoder_inputs, decoder_inputs,
+                                               decoder_masks, bucket_id, True)
 
-                if config.ANTI_LM:
-                    # Get a 1-element batch to feed the sentence to the model.
-                    encoder_inputs, decoder_inputs, target_weights = data.get_batch([(token_ids, [])],
-                                                                                    bucket_id,
-                                                                                    batch_size=1)
-                    # do beam search and antilm together
-                    # Get output logits for the sentence.
-                    beams, new_beams, results = [(1, 0, {'eos': 0, 'dec_inp': decoder_inputs, 'prob': 1, 'prob_ts': 1, 'prob_t': 1})], [], [] # initialize beams as (log_prob, empty_string, eos)
-                    dummy_encoder_inputs = [np.array([config.PAD_ID]) for _ in range(len(encoder_inputs))]
-
-                    for dptr in range(len(decoder_inputs)-1):
-                      if dptr > 0:
-                        target_weights[dptr] = [1.]
-                        beams, new_beams = new_beams[:args.beam_size], []
-                      if config.DEBUG: print("=====[beams]=====", beams)
-                      heapq.heapify(beams)  # since we will remove something
-                      for prob, _, cand in beams:
-                        if cand['eos']:
-                          results += [(prob, 0, cand)]
-                          continue
-
-                        # normal seq2seq
-                        if config.DEBUG:
-                            print(cand['prob'], " ".join([dict_lookup(inv_dec_vocab, w[0]) for w in cand['dec_inp']]))
-
-                        # all_prob_ts = model_step(encoder_inputs, cand['dec_inp'], dptr, target_weights, bucket_id)
-                        _, _, all_prob_ts = run_step(sess, model, encoder_inputs, cand['dec_inp'],
-                                                                       target_weights, bucket_id, True)
-                        if config.ANTI_LM:
-                          # anti-lm
-                        #   all_prob_t  = model_step(dummy_encoder_inputs, cand['dec_inp'], dptr, target_weights, bucket_id)
-                          _, _, all_prob_t = run_step(sess, model, dummy_encoder_inputs, cand['dec_inp'],
-                                                                         target_weights, bucket_id, True)
-                          # adjusted probability
-                          all_prob    = all_prob_ts - config.LAMBDA * np.array(all_prob_t) #+ args.n_bonus * dptr + random() * 1e-50
-                        else:
-                          all_prob_t  = [0]*len(all_prob_ts)
-                          all_prob    = all_prob_ts
-
-                        # suppress copy-cat (respond the same as input)
-                        if dptr < len(token_ids):
-                          all_prob[token_ids[dptr]] = all_prob[token_ids[dptr]] * 0.01
-
-                        # for debug use
-                        # if config.DEBUG: return all_prob, all_prob_ts, all_prob_t
-
-                        # beam search
-                        for c in np.argsort(all_prob)[::-1][:args.beam_size]:
-                          new_cand = {
-                            'eos'     : (c == config.EOS_ID),
-                            'dec_inp' : [(np.array([c]) if i == (dptr+1) else k) for i, k in enumerate(cand['dec_inp'])],
-                            'prob_ts' : cand['prob_ts'] * all_prob_ts[c],
-                            'prob_t'  : cand['prob_t'] * all_prob_t[c],
-                            'prob'    : cand['prob'] * all_prob[c],
-                          }
-                          new_cand = (new_cand['prob'], random(), new_cand) # stuff a random to prevent comparing new_cand
-
-                          try:
-                            if (len(new_beams) < config.BEAM_SIZE):
-                              heapq.heappush(new_beams, new_cand)
-                            elif (new_cand[0] > new_beams[0][0]):
-                              heapq.heapreplace(new_beams, new_cand)
-                          except Exception as e:
-                            print("[Error]", e)
-                            print("-----[new_beams]-----\n", new_beams)
-                            print("-----[new_cand]-----\n", new_cand)
-
-                    results += new_beams  # flush last cands
-
-                    # post-process results
-                    res_cands = []
-                    for prob, _, cand in sorted(results, reverse=True):
-                      cand['dec_inp'] = " ".join([dict_lookup(inv_dec_vocab, w) for w in cand['dec_inp']])
-                      print('response antilm: ', cand['dec_inp'])
-                      res_cands.append(cand)
-                    return res_cands[:args.beam_size]
-
-                else:
-                    # Get a 1-element batch to feed the sentence to the model.
-                    encoder_inputs, decoder_inputs, decoder_masks = data.get_batch([(token_ids, [])],
-                                                                                    bucket_id,
-                                                                                    batch_size=1)
-                    # add beam search parameter to run_Step
-                    path, symbol, output_logits = run_step(sess, model, encoder_inputs, decoder_inputs,
-                                                   decoder_masks, bucket_id, True)
-
-                    k = output_logits[0]
-                    paths = []
-                    for kk in range(config.BEAM_SIZE):
-                      paths.append([])
-                    curr = range(config.BEAM_SIZE)
-                    num_steps = len(path)
-                    for i in range(num_steps-1, -1, -1):
-                      for kk in range(config.BEAM_SIZE):
-                        paths[kk].append(symbol[i][curr[kk]])
-                        curr[kk] = path[i][curr[kk]]
-                    responses = set()
-                    for kk in range(config.BEAM_SIZE):
-                        response = _construct_beam_response(paths[kk], inv_dec_vocab)
-                        if response not in responses:
-                          responses.add(response)
-                          print('response: ', response)
-                          output_file.write('BOT ++++ ' + response + '\n')
+                k = output_logits[0]
+                paths = []
+                for kk in range(config.BEAM_SIZE):
+                  paths.append([])
+                curr = range(config.BEAM_SIZE)
+                num_steps = len(path)
+                for i in range(num_steps-1, -1, -1):
+                  for kk in range(config.BEAM_SIZE):
+                    paths[kk].append(symbol[i][curr[kk]])
+                    curr[kk] = path[i][curr[kk]]
+                responses = set()
+                for kk in range(config.BEAM_SIZE):
+                    response = _construct_beam_response(paths[kk], inv_dec_vocab)
+                    if response not in responses:
+                      responses.add(response)
+                      print('response: ', response)
+                      output_file.write('BOT ++++ ' + response + '\n')
         else:
             while True:
                 line = _get_user_input()
@@ -381,27 +295,27 @@ def chat():
                 # Which bucket does it belong to?
                 bucket_id = _find_right_bucket(len(token_ids))
                 # Get a 1-element batch to feed the sentence to the model.
-                encoder_inputs, decoder_inputs, target_weights = data.get_batch([(token_ids, [])],
+                encoder_inputs, decoder_inputs, decoder_masks = data.get_batch([(token_ids, [])],
                                                                                 bucket_id,
                                                                                 batch_size=1)
-                # # Get output logits for the sentence.
-                # _, _, output_logits = run_step(sess, model, encoder_inputs, decoder_inputs,
-                #                                decoder_masks, bucket_id, True)
-                #
-                # if config.ANTI_LM:
-                #     dummy_encoder_inputs = [np.array([config.PAD_ID]) for _ in range(len(encoder_inputs))]
-                #     _, _, output_logits_t = run_step(sess, model, dummy_encoder_inputs, decoder_inputs,
-                #                                                    decoder_masks, bucket_id, True)
-                #     # only apply antilm up to a certain point in the decoder input
-                #     gamma = int(config.GAMMA*len(decoder_inputs))
-                #     antilm_mask = np.array([1*( _ < gamma) for _ in range(len(decoder_inputs))]).reshape((-1,1,1))
-                #     output_logits -= config.LAMBDA*(output_logits_t*antilm_mask)
+                # Get output logits for the sentence.
+                _, _, output_logits = run_step(sess, model, encoder_inputs, decoder_inputs,
+                                               decoder_masks, bucket_id, True)
 
-                # response = _construct_response(output_logits, inv_dec_vocab)
-                # print('response: ', response)
-                # output_file.write('BOT ++++ ' + response + '\n')
-        # output_file.write('=============================================\n')
-        # output_file.close()
+                if config.ANTI_LM:
+                    dummy_encoder_inputs = [np.array([config.PAD_ID]) for _ in range(len(encoder_inputs))]
+                    _, _, output_logits_t = run_step(sess, model, dummy_encoder_inputs, decoder_inputs,
+                                                                   decoder_masks, bucket_id, True)
+                    # only apply antilm up to a certain point in the decoder input
+                    gamma = int(config.GAMMA*len(decoder_inputs))
+                    antilm_mask = np.array([1*( _ < gamma) for _ in range(len(decoder_inputs))]).reshape((-1,1,1))
+                    output_logits -= config.LAMBDA*(output_logits_t*antilm_mask)
+
+                response = _construct_response(output_logits, inv_dec_vocab)
+                print('response: ', response)
+                output_file.write('BOT ++++ ' + response + '\n')
+        output_file.write('=============================================\n')
+        output_file.close()
 
 def main():
     parser = argparse.ArgumentParser()
