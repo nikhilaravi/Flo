@@ -67,12 +67,12 @@ DEC_VOCAB = 24635
 
 # BEAM Search
 
-BEAM_SEARCH = False
-BEAM_SIZE = 5
+BEAM_SEARCH = True
+BEAM_SIZE = 100
 
 # ANTI LM model
-ANTI_LM = True
-GAMMA = 0.4
-LAMBDA = 0.3 # punishment weight for ANTILM model
+ANTI_LM = False
+GAMMA = 0.9
+LAMBDA = 0.7 # punishment weight for ANTILM model
 # ENC_VOCAB = 24498
 # DEC_VOCAB = 24680
